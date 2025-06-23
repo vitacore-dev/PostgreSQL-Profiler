@@ -1,0 +1,351 @@
+# PostgreSQL Profiler - Обновлённая конфигурация Docker Compose с оптимизированными ML-компонентами
+version: '3.8'
+
+services:
+  # PostgreSQL база данных
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgresql_profiler_db
+    environment:
+      POSTGRES_DB: postgresql_profiler
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - profiler_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgresql_profiler"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c pg_stat_statements.track=all
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+
+  # Redis для кэширования и Celery
+  redis:
+    image: redis:7-alpine
+    container_name: postgresql_profiler_redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - profiler_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+
+  # Backend приложение
+  backend:
+    build:
+      context: ./postgresql_profiler
+      dockerfile: Dockerfile
+    container_name: postgresql_profiler_backend
+    environment:
+      FLASK_ENV: ${FLASK_ENV:-production}
+      FLASK_DEBUG: ${FLASK_DEBUG:-False}
+      SECRET_KEY: ${SECRET_KEY:-change-this-secret-key-in-production}
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-password}@postgres:5432/postgresql_profiler
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      
+      # ML настройки
+      ML_MODEL_DIR: /app/ml_models
+      ML_MIN_TRAIN_SIZE: ${ML_MIN_TRAIN_SIZE:-50}
+      ML_RETRAIN_THRESHOLD: ${ML_RETRAIN_THRESHOLD:-0.8}
+      ML_CACHE_TTL: ${ML_CACHE_TTL:-3600}
+      
+      # Database pool настройки
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-20}
+      DB_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-30}
+      DB_POOL_RECYCLE: ${DB_POOL_RECYCLE:-3600}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-30}
+      
+      # Мониторинг настройки
+      METRICS_COLLECTION_INTERVAL: ${METRICS_COLLECTION_INTERVAL:-30}
+      METRICS_RETENTION_DAYS: ${METRICS_RETENTION_DAYS:-30}
+      ALERT_CHECK_INTERVAL: ${ALERT_CHECK_INTERVAL:-60}
+      
+      # API настройки
+      API_PAGINATION_DEFAULT: ${API_PAGINATION_DEFAULT:-50}
+      API_PAGINATION_MAX: ${API_PAGINATION_MAX:-1000}
+      
+    ports:
+      - "${BACKEND_PORT:-5000}:5000"
+    volumes:
+      - ml_models:/app/ml_models
+      - app_logs:/app/logs
+    networks:
+      - profiler_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Celery Worker для мониторинга
+  celery_worker_monitoring:
+    build:
+      context: ./postgresql_profiler
+      dockerfile: Dockerfile
+    container_name: postgresql_profiler_celery_monitoring
+    environment:
+      FLASK_ENV: ${FLASK_ENV:-production}
+      PYTHONPATH: /app:/app/src
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-password}@postgres:5432/postgresql_profiler
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-4}
+      CELERY_WORKER_MAX_MEMORY: ${CELERY_WORKER_MAX_MEMORY:-200000}
+    volumes:
+      - ml_models:/app/ml_models
+      - app_logs:/app/logs
+    networks:
+      - profiler_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    command: >
+      celery -A src.main.celery worker
+      --queues=monitoring
+      --loglevel=info
+      --concurrency=${CELERY_WORKER_CONCURRENCY:-4}
+      --max-memory-per-child=${CELERY_WORKER_MAX_MEMORY:-200000}
+      --time-limit=300
+      --soft-time-limit=240
+    healthcheck:
+      test: ["CMD", "celery", "-A", "src.main.celery", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Celery Worker для ML задач
+  celery_worker_ml:
+    build:
+      context: ./postgresql_profiler
+      dockerfile: Dockerfile
+    container_name: postgresql_profiler_celery_ml
+    environment:
+      FLASK_ENV: ${FLASK_ENV:-production}
+      PYTHONPATH: /app:/app/src
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-password}@postgres:5432/postgresql_profiler
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      CELERY_WORKER_CONCURRENCY: ${CELERY_ML_WORKER_CONCURRENCY:-2}
+      CELERY_WORKER_MAX_MEMORY: ${CELERY_ML_WORKER_MAX_MEMORY:-500000}
+      
+      # ML настройки
+      ML_MODEL_DIR: /app/ml_models
+      ML_MIN_TRAIN_SIZE: ${ML_MIN_TRAIN_SIZE:-50}
+      ML_RETRAIN_THRESHOLD: ${ML_RETRAIN_THRESHOLD:-0.8}
+    volumes:
+      - ml_models:/app/ml_models
+      - app_logs:/app/logs
+    networks:
+      - profiler_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    command: >
+      celery -A src.main.celery worker
+      --queues=ml_tasks
+      --loglevel=info
+      --concurrency=${CELERY_ML_WORKER_CONCURRENCY:-2}
+      --max-memory-per-child=${CELERY_ML_WORKER_MAX_MEMORY:-500000}
+      --time-limit=600
+      --soft-time-limit=540
+    healthcheck:
+      test: ["CMD", "celery", "-A", "src.main.celery", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Celery Beat для расписания задач
+  celery_beat:
+    build:
+      context: ./postgresql_profiler
+      dockerfile: Dockerfile
+    container_name: postgresql_profiler_celery_beat
+    environment:
+      FLASK_ENV: ${FLASK_ENV:-production}
+      PYTHONPATH: /app:/app/src
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-password}@postgres:5432/postgresql_profiler
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    volumes:
+      - ml_models:/app/ml_models
+      - app_logs:/app/logs
+      - celery_beat_data:/app/celerybeat-schedule
+    networks:
+      - profiler_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    command: >
+      celery -A src.main.celery beat
+      --loglevel=info
+      --schedule=/app/celerybeat-schedule/celerybeat-schedule
+      --pidfile=/app/celerybeat-schedule/celerybeat.pid
+
+  # Frontend приложение
+  frontend:
+    build:
+      context: ./postgresql_profiler_frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:5000/api}
+    container_name: postgresql_profiler_frontend
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:5000/api}
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    networks:
+      - profiler_network
+    depends_on:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx reverse proxy (опционально для production)
+  nginx:
+    image: nginx:alpine
+    container_name: postgresql_profiler_nginx
+    ports:
+      - "${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    networks:
+      - profiler_network
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+    profiles:
+      - production
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Prometheus для мониторинга (опционально)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: postgresql_profiler_prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - profiler_network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # Grafana для визуализации (опционально)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: postgresql_profiler_grafana
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - profiler_network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  ml_models:
+    driver: local
+  app_logs:
+    driver: local
+  celery_beat_data:
+    driver: local
+  nginx_logs:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  profiler_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+

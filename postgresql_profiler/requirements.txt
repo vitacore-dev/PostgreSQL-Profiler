@@ -1,0 +1,68 @@
+# Обновлённые зависимости для оптимизированного PostgreSQL Profiler
+asyncpg==0.30.0
+blinker==1.9.0
+celery==5.3.4
+click==8.1.7
+Flask==3.0.0
+Flask-Cors==4.0.0
+Flask-Migrate==4.0.5
+Flask-SQLAlchemy==3.1.1
+greenlet==3.0.3
+itsdangerous==2.1.2
+Jinja2==3.1.2
+kombu==5.3.4
+MarkupSafe==2.1.3
+psycopg2-binary==2.9.9
+redis==5.0.1
+SQLAlchemy==2.0.23
+Werkzeug==3.0.1
+
+# Системные утилиты
+psutil==5.9.6
+
+# ML и анализ данных
+scikit-learn==1.3.2
+numpy==1.24.4
+pandas==2.1.4
+joblib==1.3.2
+
+# Логирование и мониторинг
+structlog==23.2.0
+prometheus-client==0.19.0
+
+# Дополнительные зависимости для production
+gunicorn==21.2.0
+gevent==23.9.1
+
+# Валидация и сериализация
+marshmallow==3.20.1
+marshmallow-sqlalchemy==0.29.0
+
+# Утилиты
+python-dotenv==1.0.0
+pytz==2023.3
+dateutils==0.6.12
+
+# Тестирование (опционально)
+pytest==7.4.3
+pytest-flask==1.3.0
+pytest-cov==4.1.0
+
+# Безопасность
+cryptography==41.0.7
+
+# Дополнительные ML библиотеки
+scipy==1.11.4
+matplotlib==3.8.2
+seaborn==0.13.0
+
+# Для работы с временными рядами
+statsmodels==0.14.1
+
+# Для оптимизации
+numba==0.58.1
+
+# Для работы с конфигурацией
+pydantic==2.5.2
+pydantic-settings==2.1.0
+

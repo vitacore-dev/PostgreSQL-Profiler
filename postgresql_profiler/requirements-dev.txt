@@ -1,0 +1,40 @@
+# Конфигурация для разработки PostgreSQL Profiler
+
+# Python зависимости для разработки
+asyncpg==0.30.0
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-asyncio==0.21.1
+pytest-mock==3.12.0
+pytest-xdist==3.5.0
+black==23.11.0
+isort==5.12.0
+flake8==6.1.0
+pylint==3.0.3
+mypy==1.7.1
+bandit==1.7.5
+safety==2.3.5
+pre-commit==3.6.0
+coverage==7.3.2
+
+# Тестирование и мокинг
+factory-boy==3.3.0
+freezegun==1.2.2
+responses==0.24.1
+httpx==0.25.2
+
+# Документация
+sphinx==7.2.6
+sphinx-rtd-theme==1.3.0
+sphinx-autodoc-typehints==1.25.2
+
+# Профилирование и отладка
+memory-profiler==0.61.0
+line-profiler==4.1.1
+py-spy==0.3.14
+
+# Дополнительные инструменты
+ipython==8.17.2
+jupyter==1.0.0
+notebook==7.0.6
+
