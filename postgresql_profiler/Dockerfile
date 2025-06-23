@@ -37,6 +37,14 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY src/ ./src/
 COPY start.sh ./
 
+# Создание директории для Celery Beat с правильными правами
+RUN mkdir -p /app/celerybeat-schedule && \
+    mkdir -p /app/logs && \
+    mkdir -p /app/ml_models && \
+    chmod 755 /app/celerybeat-schedule && \
+    chmod 755 /app/logs && \
+    chmod 755 /app/ml_models
+
 # Установка прав доступа
 RUN chmod +x start.sh && \
     chown -R appuser:appgroup /app

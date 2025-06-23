@@ -125,7 +125,7 @@ services:
     container_name: postgresql_profiler_celery_monitoring
     environment:
       FLASK_ENV: ${FLASK_ENV:-production}
-      PYTHONPATH: /app:/app/src
+      PYTHONPATH: /app/src
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-password}@postgres:5432/postgresql_profiler
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
@@ -165,7 +165,7 @@ services:
     container_name: postgresql_profiler_celery_ml
     environment:
       FLASK_ENV: ${FLASK_ENV:-production}
-      PYTHONPATH: /app:/app/src
+      PYTHONPATH: /app/src
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-password}@postgres:5432/postgresql_profiler
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
@@ -210,7 +210,7 @@ services:
     container_name: postgresql_profiler_celery_beat
     environment:
       FLASK_ENV: ${FLASK_ENV:-production}
-      PYTHONPATH: /app:/app/src
+      PYTHONPATH: /app/src
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-password}@postgres:5432/postgresql_profiler
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
@@ -323,6 +323,8 @@ services:
     restart: unless-stopped
     profiles:
       - monitoring
+
+
 
 volumes:
   postgres_data:

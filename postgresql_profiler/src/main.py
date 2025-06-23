@@ -517,6 +517,9 @@ def make_celery(app: Flask) -> Celery:
 # Создание приложения на уровне модуля для Gunicorn
 app = create_app(os.getenv('FLASK_ENV', 'production'))
 
+# Создание объекта celery на уровне модуля для Celery workers
+celery = make_celery(app)
+
 if __name__ == '__main__':
     # Создание таблиц базы данных
     with app.app_context():
