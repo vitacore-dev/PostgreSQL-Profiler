@@ -123,10 +123,10 @@ def register_routes(app: Flask):
     @app.route('/api/metrics')
     def metrics_endpoint():
         """Endpoint для метрик Prometheus"""
-        return generate_latest(), 200, {'Content-Type': CONTENT_TYPE_LATEST}
+        return generate_latest(app.metrics.registry), 200, {'Content-Type': CONTENT_TYPE_LATEST}
     
     @app.route('/api/databases', methods=['GET', 'OPTIONS'])
-    @cache_response  # Кэшируем на 5 минут
+    @cache_response(timeout=300)  # Кэшируем на 5 минут
     @log_function_call
     def get_databases():
         """Получение списка сохраненных баз данных"""
@@ -235,7 +235,7 @@ def register_routes(app: Flask):
             }), 500
     
     @app.route('/api/databases/<int:database_id>/metrics')
-    @cache_response  # Кэшируем на 1 минуту
+    @cache_response(timeout=60)  # Кэшируем на 1 минуту
     @log_function_call
     def get_database_metrics(database_id: int):
         """Получение метрик базы данных с пагинацией"""
@@ -333,7 +333,7 @@ def register_routes(app: Flask):
             }), 404
     
     @app.route('/api/alerts')
-    @cache_response  # Кэшируем на 2 минуты
+    @cache_response(timeout=120)  # Кэшируем на 2 минуты
     @log_function_call
     def get_alerts():
         """Получение активных алертов с пагинацией"""
@@ -397,7 +397,7 @@ def register_routes(app: Flask):
             }), 500
     
     @app.route('/api/recommendations')
-    @cache_response  # Кэшируем на 5 минут
+    @cache_response(timeout=300)  # Кэшируем на 5 минут
     @log_function_call
     def get_recommendations():
         """Получение рекомендаций с пагинацией"""
