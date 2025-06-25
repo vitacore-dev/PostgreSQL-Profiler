@@ -283,7 +283,7 @@ services:
 
   # Prometheus для мониторинга (опционально)
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.47.2
     container_name: postgresql_profiler_prometheus
     ports:
       - "${PROMETHEUS_PORT:-9090}:9090"
@@ -305,7 +305,7 @@ services:
 
   # Grafana для визуализации (опционально)
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:10.4.2
     container_name: postgresql_profiler_grafana
     ports:
       - "${GRAFANA_PORT:-3001}:3000"
@@ -324,22 +324,16 @@ services:
     profiles:
       - monitoring
 volumes:
-  postgres_data:
-    driver: local
-  redis_data:
-    driver: local
-  ml_models:
-    driver: local
-  app_logs:
-    driver: local
-  celery_beat_data:
-    driver: local
-  nginx_logs:
-    driver: local
-  prometheus_data:
-    driver: local
-  grafana_data:
-    driver: local
+  # Named volumes for data persistence
+  # Using the default 'local' driver
+  app_logs: {}
+  celery_beat_data: {}
+  grafana_data: {}
+  ml_models: {}
+  nginx_logs: {}
+  postgres_data: {}
+  prometheus_data: {}
+  redis_data: {}
 
 networks:
   profiler_network:
